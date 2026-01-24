@@ -615,7 +615,7 @@ namespace ka {
 /// iterator `i` equals `b`. Otherwise, the result is non-empty, and `[b, i)`,
 /// with `i in [b, e]`, is the subrange successfully parsed.
 
-namespace concept { // To allow doc tools to extract this documentation.
+namespace concepts { // To allow doc tools to extract this documentation.
 }
 } // namespace ka
 
