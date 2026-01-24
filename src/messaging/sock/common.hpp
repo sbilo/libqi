@@ -4,6 +4,7 @@
 #include <mutex>
 #include <boost/shared_ptr.hpp>
 #include <boost/optional.hpp>
+#include <boost/asio/bind_executor.hpp>
 #include <ka/functional.hpp>
 #include <ka/typetraits.hpp>
 #include <ka/macroregular.hpp>
@@ -87,9 +88,9 @@ namespace qi { namespace sock {
   // PolymorphicTransformation:
     /// Procedure<void (Args...)> Proc
     template<typename Proc>
-    auto operator()(Proc&& p) -> decltype(_io->wrap(std::forward<Proc>(p)))
+    auto operator()(Proc&& p) -> decltype(boost::asio::bind_executor(_io->get_executor(), std::forward<Proc>(p)))
     {
-      return _io->wrap(std::forward<Proc>(p));
+      return boost::asio::bind_executor(_io->get_executor(), std::forward<Proc>(p));
     }
   };
 

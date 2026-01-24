@@ -27,21 +27,19 @@ namespace qi { namespace sock {
   ///   callback will be called with the error given by operationAborted<ErrorCode<N>>.
   ///
   /// Lemma ResolveUrlList.1:
-  ///   The iterator given to the callback remains valid even if the object is
-  ///   destroyed (meaning you can still access the iterator value).
+  ///   The results given to the callback remain valid even if the object is
+  ///   destroyed (meaning you can still access the results).
   ///
   /// Usage:
   /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   /// // Network N
   /// ResolveUrlList resolve{io};
-  /// resolve(url, [](ErrorCode<N> e, Iterator<Resolver<N>> it) {
+  /// resolve(url, [](ErrorCode<N> e, ResolverResults<Resolver<N>> results) {
   ///   if (e) {
   ///     // handle error
   ///   } else {
-  ///     Iterator<Resolver<N>> itEnd;
-  ///     while (it != itEnd) {
-  ///       // Use it->endpoint() for example.
-  ///       ++it;
+  ///     for (const auto& entry : results) {
+  ///       // Use entry.endpoint() for example.
   ///     }
   ///   }
   /// });
@@ -64,7 +62,7 @@ namespace qi { namespace sock {
     }
   // Procedure:
     /// Network N,
-    /// Procedure<void (ErrorCode<N>, Iterator<Resolver<N>>)> Proc,
+    /// Procedure<void (ErrorCode<N>, ResolverResults<Resolver<N>>)> Proc,
     /// Procedure<void (Resolver<N>&)> Proc1
     template<typename Proc, typename Proc1 = ka::constant_function_t<void>>
     void operator()(const Url& url, Proc onComplete, Proc1 setupStop = Proc1{})
@@ -75,12 +73,7 @@ namespace qi { namespace sock {
         return;
       }
       qiLogVerbose(logCategory()) << "(ResolverUrlList)" << this << ": Trying to connect to " << url.host() << ":" << url.port();
-      Query<Resolver<N>> query(url.host(), os::to_string(url.port())
-#if !ANDROID
-        , Query<Resolver<N>>::all_matching
-#endif
-      );
-      _resolver.async_resolve(query, onComplete);
+      _resolver.async_resolve(url.host(), os::to_string(url.port()), onComplete);
       setupStop(_resolver);
     }
   };
@@ -89,19 +82,19 @@ namespace qi { namespace sock {
   {
     /// Precondition: readableBoundedRange(b, e)
     ///
-    /// Iterator<Entry<Resolver<N>>> I
+    /// Iterator I
     template<typename I>
     auto findFirstValidIfAny(I b, const I& e, IpV6Enabled ipV6)
         -> boost::optional<ka::Decay<decltype(*b)>>
     {
-      using Entry = ka::Decay<decltype(*b)>;
+      using EntryType = ka::Decay<decltype(*b)>;
       if (!(*ipV6))
       {
-        b = std::find_if(b, e, [](const Entry& entry) {
+        b = std::find_if(b, e, [](const EntryType& entry) {
           return !entry.endpoint().address().is_v6();
         });
       }
-      using O = boost::optional<Entry>;
+      using O = boost::optional<EntryType>;
       return b == e ? O{} : O{*b};
     }
   } // namespace detail
@@ -116,8 +109,8 @@ namespace qi { namespace sock {
   ///   callback will be called with the error given by operationAborted<ErrorCode<N>>.
   ///
   /// Lemma ResolveUrl.1:
-  ///   The iterator given to the callback remains valid even if the object is
-  ///   destroyed (meaning you can still access the iterator value).
+  ///   The results given to the callback remain valid even if the object is
+  ///   destroyed (meaning you can still access the results).
   ///
   /// Usage:
   /// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -159,14 +152,13 @@ namespace qi { namespace sock {
     void operator()(const Url& url, IpV6Enabled ipV6, Proc onComplete, Proc1 setupStop = Proc1{})
     {
       _resolve(url,
-        [=](const ErrorCode<N>& erc, Iterator<Resolver<N>> it) mutable {
+        [=](const ErrorCode<N>& erc, ResolverResults<Resolver<N>> results) mutable {
           if (erc)
           {
             onComplete(erc, OptionalEntry{});
             return;
           }
-          decltype(it) itEnd;
-          onComplete(erc, detail::findFirstValidIfAny(it, itEnd, ipV6));
+          onComplete(erc, detail::findFirstValidIfAny(results.begin(), results.end(), ipV6));
         },
         setupStop);
     }

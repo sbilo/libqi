@@ -26,18 +26,18 @@ namespace qi { namespace sock {
     using socket_option_no_delay_type = boost::asio::ip::tcp::no_delay;
     using accept_option_reuse_address_type = boost::asio::ip::tcp::acceptor::reuse_address;
     using error_code_type = boost::system::error_code;
-    using io_service_type = boost::asio::io_service;
+    using io_context_type = boost::asio::io_context;
     using const_buffer_type = boost::asio::const_buffer;
     using ssl_verify_mode_type = boost::asio::ssl::verify_mode;
-    static io_service_type& defaultIoService()
+    static io_context_type& defaultIoService()
     {
-      return *static_cast<io_service_type*>(getNetworkEventLoop()->nativeHandle());
+      return *static_cast<io_context_type*>(getNetworkEventLoop()->nativeHandle());
     }
     template<typename S>
-    static io_service_type& getIoService(S& socket)
+    static io_context_type& getIoService(S& socket)
     {
       auto exec = socket.get_executor();
-      return static_cast<io_service_type&>(exec.context());
+      return static_cast<io_context_type&>(exec.context());
     }
     static ssl_verify_mode_type sslVerifyNone()
     {

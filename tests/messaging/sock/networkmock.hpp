@@ -80,25 +80,76 @@ namespace mock
       }
       KA_GENERATE_FRIEND_REGULAR_OPS_1(error_code_type, _value)
     };
-    struct io_service_type
+    struct io_context_type
     {
       mutable qi::Strand _strand;
 
-      template<typename Proc>
-      auto wrap(Proc&& p) const
-        -> decltype(ka::compose(ka::constant_function(), _strand.schedulerFor(ka::fwd<Proc>(p))))
+      struct executor_type
       {
-        // If `Proc`'s return type is `R`, then `_strand.schedulerFor(p)` returns a function object that
-        // returns a `qi::Future<R>`. But this `wrap` method must return a function object that returns `void`
-        // (see `NetIoService` concept).
-        // So we compose the stranded procedure with a procedure that does nothing and returns `void` (namely
-        // `PolymorphicConstantFunction<void>{}`).
-        return ka::compose(ka::constant_function(), _strand.schedulerFor(ka::fwd<Proc>(p)));
+        qi::Strand* _strand;
+        io_context_type* _context;
+        explicit executor_type(qi::Strand* strand = nullptr, io_context_type* ctx = nullptr)
+          : _strand(strand), _context(ctx) {}
+
+        io_context_type& context() const noexcept { return *_context; }
+
+        bool operator==(const executor_type& other) const noexcept
+        {
+          return _strand == other._strand;
+        }
+        bool operator!=(const executor_type& other) const noexcept
+        {
+          return !(*this == other);
+        }
+
+        // Required by Boost.Asio executor concept
+        void on_work_started() const noexcept {}
+        void on_work_finished() const noexcept {}
+
+        template<typename F, typename A>
+        void dispatch(F&& f, const A&) const
+        {
+          if (_strand)
+            _strand->post(std::forward<F>(f));
+          else
+            std::forward<F>(f)();
+        }
+
+        template<typename F, typename A>
+        void post(F&& f, const A&) const
+        {
+          if (_strand)
+            _strand->post(std::forward<F>(f));
+          else
+            std::forward<F>(f)();
+        }
+
+        template<typename F, typename A>
+        void defer(F&& f, const A& a) const
+        {
+          post(std::forward<F>(f), a);
+        }
+      };
+
+      executor_type get_executor() const
+      {
+        return executor_type(const_cast<qi::Strand*>(&_strand), const_cast<io_context_type*>(this));
+      }
+
+      void restart() {}
+
+      // ADL-compatible post for boost::asio::post(io_context, handler)
+      template<typename F>
+      friend void post(io_context_type& ctx, F&& f)
+      {
+        ctx._strand.post(std::forward<F>(f));
       }
     };
+    // Keep io_service_type as alias for backward compatibility in some test code
+    using io_service_type = io_context_type;
     /// NetSslSocket S
     template<typename S>
-    static io_service_type& getIoService(const S&)
+    static io_context_type& getIoService(const S&)
     {
       return defaultIoService();
     }
@@ -211,8 +262,8 @@ namespace mock
         _endpoint _e;
         _endpoint remote_endpoint() const {return _e;}
       };
-      io_service_type* _io;
-      ssl_socket_type(io_service_type& io, ssl_context_type) : _io(&io) {}
+      io_context_type* _io;
+      ssl_socket_type(io_context_type& io, ssl_context_type) : _io(&io) {}
 
       using _anyAsyncHandshaker = std::function<void (handshake_type, _anyHandler)>;
       static _anyAsyncHandshaker async_handshake;
@@ -228,8 +279,8 @@ namespace mock
     };
     struct acceptor_type
     {
-      acceptor_type(io_service_type& io) : _io(io) {}
-      io_service_type& _io;
+      acceptor_type(io_context_type& io) : _io(io) {}
+      io_context_type& _io;
       using _anyAsyncAccepter = std::function<void (ssl_socket_type::next_layer_type&, _anyHandler)>;
 
       void open(_endpoint::protocol_t) {}
@@ -247,44 +298,40 @@ KA_WARNING_POP()
     };
     struct resolver_type
     {
-      struct query
-      {
-        enum flags {all_matching};
-        std::string _host, _port;
-        flags _flags;
-        query(std::string host, std::string port, flags f = all_matching)
-          : _host(host), _port(port), _flags(f)
-        {
-        }
-      };
-      struct iterator
+      using value_type = _resolver_entry;
+
+      struct results_type
       {
         using value_type = _resolver_entry;
-        using iterator_category = std::forward_iterator_tag;
-        using difference_type = std::ptrdiff_t;
-        using pointer = value_type*;
-        using reference = value_type&;
-        static _resolver_entry* _sentinel;
-        _resolver_entry** _p;
-        iterator(_resolver_entry** p = &_sentinel) : _p{p} {}
-        value_type operator*() {return **_p;}
-        friend value_type src(iterator x) {return *x;}
-        iterator& operator++() {++_p; return *this;}
-        bool operator==(iterator b) const {return _p == b._p || (!*_p && !*b._p);}
-        bool operator!=(iterator b) const {return !(*this == b);}
+        using iterator = const _resolver_entry*;
+        std::vector<_resolver_entry> _entries;
+        results_type() = default;
+        results_type(std::vector<_resolver_entry> entries) : _entries(std::move(entries)) {}
+        iterator begin() const { return _entries.data(); }
+        iterator end() const { return _entries.data() + _entries.size(); }
+        bool empty() const { return _entries.empty(); }
+        size_t size() const { return _entries.size(); }
       };
-      io_service_type& _io;
-      resolver_type(io_service_type& io) : _io(io) {}
 
-      using _anyResolveHandler = std::function<void (error_code_type, iterator)>;
-      using _anyAsyncResolver = std::function<void (query, _anyResolveHandler)>;
-      static _anyAsyncResolver async_resolve;
+      io_context_type& _io;
+      resolver_type(io_context_type& io) : _io(io) {}
+
+      using _anyResolveHandler = std::function<void (error_code_type, results_type)>;
+      using _anyAsyncResolver = std::function<void (std::string, std::string, _anyResolveHandler)>;
+      static _anyAsyncResolver _async_resolve_impl;
+
+      template<typename Handler>
+      void async_resolve(const std::string& host, const std::string& port, Handler&& h)
+      {
+        _async_resolve_impl(host, port, std::forward<Handler>(h));
+      }
+
       void cancel() {}
     };
 
-    static io_service_type& defaultIoService()
+    static io_context_type& defaultIoService()
     {
-      static qi::sock::IoService<mock::Network> io;
+      static io_context_type io;
       return io;
     }
 
@@ -500,13 +547,13 @@ namespace mock
   using S = qi::sock::SslSocket<N>;
   using _LowestLayer = N::ssl_socket_type::lowest_layer_type;
 
-  inline void defaultAsyncResolve(N::resolver_type::query q, N::resolver_type::_anyResolveHandler h)
+  inline void defaultAsyncResolve(std::string host, std::string port, N::resolver_type::_anyResolveHandler h)
   {
     std::thread{[=] {
-      static N::_resolver_entry entryIpV4{{{false, q._host}}};
-      static N::_resolver_entry entryIpV6{{{true, q._host}}};
-      static N::_resolver_entry* a[] = {&entryIpV4, &entryIpV6, nullptr};
-      h(qi::sock::success<N::error_code_type>(), N::resolver_type::iterator{a});
+      N::_resolver_entry entryIpV4{{{false, host}}};
+      N::_resolver_entry entryIpV6{{{true, host}}};
+      std::vector<N::_resolver_entry> entries = {entryIpV4, entryIpV6};
+      h(qi::sock::success<N::error_code_type>(), N::resolver_type::results_type{std::move(entries)});
     }}.join();
   }
 

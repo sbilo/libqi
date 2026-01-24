@@ -3,7 +3,7 @@
 # include <qi/api.hpp>
 # include <qi/path.hpp>
 #include <boost/filesystem.hpp>
-#include <boost/process/search_path.hpp>
+#include <boost/process/v1/search_path.hpp>
 
 namespace qi
 {

@@ -3,6 +3,7 @@
 #define _QI_SOCK_ACCEPT_HPP
 #include <boost/make_shared.hpp>
 #include <boost/optional.hpp>
+#include <boost/asio/socket_base.hpp>
 #include <ka/src.hpp>
 #include <ka/macroregular.hpp>
 #include <ka/functional.hpp>
@@ -113,7 +114,7 @@ namespace qi { namespace sock {
     acceptor.set_option(AcceptOptionReuseAddress<N>{*reuse});
     acceptor.bind(endpoint);
     ErrorCode<N> erc;
-    acceptor.listen(Lowest<SslSocket<N>>::max_connections, erc);
+    acceptor.listen(boost::asio::socket_base::max_listen_connections, erc);
     ErrorCode<N> localEpErc;
     const auto localEp = acceptor.local_endpoint(localEpErc);
     onListen(erc, localEpErc ? boost::none : boost::make_optional(localEp));

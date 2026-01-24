@@ -34,21 +34,14 @@ namespace qi { namespace sock {
   using ErrorCode = typename N::error_code_type;
 
   template<typename N>
-  using IoService = typename N::io_service_type;
+  using IoService = typename N::io_context_type;
 
   // NetResolver-related traits
   template<typename R>
-  using Query = typename R::query;
+  using ResolverResults = typename R::results_type;
 
   template<typename R>
-  using Iterator = typename R::iterator;
-
-  template<typename R>
-  using Entry = typename R::iterator::value_type;
-
-  // NetQuery-related traits
-  template<typename Q>
-  using Flag = typename Q::flags;
+  using Entry = typename R::results_type::value_type;
 
   // NetSslContext-related traits
   template<typename C>

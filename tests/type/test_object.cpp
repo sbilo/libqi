@@ -776,7 +776,7 @@ TEST(TestObject, CallBackRegistration)
   gob.advertiseSignal("testcb");
   qi::AnyObject obj = gob.object();
   CPPCB c;
-  obj.connect("testcb", boost::bind(&CPPCB::cb, &c));
+  obj.connect("testcb", std::function<void()>(boost::bind(&CPPCB::cb, &c)));
   obj.connect("testcb", &ccb);
  // obj->connect("testcb", boost::bind<void>(&ccb));
 }

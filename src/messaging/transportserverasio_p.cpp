@@ -63,7 +63,7 @@ namespace qi
 
     if (context)
     {
-      _acceptor = new boost::asio::ip::tcp::acceptor(*(boost::asio::io_service*)context->nativeHandle());
+      _acceptor = new boost::asio::ip::tcp::acceptor(*(boost::asio::io_context*)context->nativeHandle());
       listen(_listenUrl);
     }
     else
@@ -239,18 +239,17 @@ namespace qi
 #ifndef ANDROID
     // resolve endpoint
     ip::tcp::resolver r(*asIoServicePtr(context));
-    ip::tcp::resolver::query q(_listenUrl.host(), boost::lexical_cast<std::string>(_listenUrl.port()),
-                               boost::asio::ip::tcp::resolver::query::all_matching);
-    ip::tcp::resolver::iterator it = r.resolve(q);
+    auto results = r.resolve(_listenUrl.host(), boost::lexical_cast<std::string>(_listenUrl.port()));
 
     static bool disableIPV6 = qi::os::getenv("QIMESSAGING_ENABLE_IPV6").empty();
+    auto it = results.begin();
     if (disableIPV6)
     {
-      while (it != boost::asio::ip::tcp::resolver::iterator() &&
+      while (it != results.end() &&
              it->endpoint().address().is_v6())
         ++it;
     }
-    if (it == ip::tcp::resolver::iterator())
+    if (it == results.end())
     {
       const char* s = "Listen error: no valid endpoint.";
       qiLogError() << s;
@@ -258,9 +257,9 @@ namespace qi
     }
 
 
-    ip::tcp::endpoint ep = *it;
+    ip::tcp::endpoint ep = it->endpoint();
 #else
-    ip::tcp::endpoint ep(boost::asio::ip::address::from_string(url.host()), url.port());
+    ip::tcp::endpoint ep(boost::asio::ip::make_address(url.host()), url.port());
 #endif // #ifndef ANDROID
 
     qiLogDebug() << "Will listen on " << ep;
@@ -284,7 +283,7 @@ namespace qi
     }
 
     boost::system::error_code ec;
-    _acceptor->listen(socket_base::max_connections, ec);
+    _acceptor->listen(socket_base::max_listen_connections, ec);
     if (ec)
     {
       qiLogError() << ec.message();

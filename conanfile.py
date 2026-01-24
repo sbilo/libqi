@@ -41,6 +41,7 @@ USED_BOOST_COMPONENTS = [
     "atomic",
     "chrono",
     "container", # required by atomic
+    "context", 
     "date_time",
     "exception", # required by atomic
     "filesystem",
@@ -61,7 +62,7 @@ class QiConan(ConanFile):
     description = "Middle-ware framework for NAOqi"
 
     requires = [
-        "boost/[~1.83]",
+        "boost/[~1.89]",
         "openssl/[~3]",
     ]
 

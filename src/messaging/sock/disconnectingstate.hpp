@@ -2,6 +2,7 @@
 #ifndef _QI_SOCK_DISCONNECTINGSTATE_HPP
 #define _QI_SOCK_DISCONNECTINGSTATE_HPP
 #include <qi/future.hpp>
+#include <boost/asio/post.hpp>
 #include "common.hpp"
 #include "macrolog.hpp"
 #include "traits.hpp"
@@ -45,11 +46,12 @@ namespace qi
           auto completePromise = _completePromise;
           auto socket = _socket;
           auto& io = N::getIoService(*socket);
-          io.wrap([=]() mutable {
+          auto handler = [=]() mutable {
             QI_LOG_DEBUG_SOCKET(socket.get()) << "Disconnecting: before socket close";
             close<N>(socket);
             completePromise.setValue(nullptr);
-          })();
+          };
+          io.get_executor().post(std::move(handler), std::allocator<void>{});
         }
         else
         {

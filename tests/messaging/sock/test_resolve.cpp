@@ -37,7 +37,7 @@ struct ResolveUrlListFun
     Promise<ErrorCode<N>> promise;
     ResolveUrlList<N> resolve{io};
     resolve(url,
-      [=](ErrorCode<N> err, Iterator<Resolver<N>>) mutable {
+      [=](ErrorCode<N> err, ResolverResults<Resolver<N>>) mutable {
         promise.setValue(err);
       }
     );
@@ -170,31 +170,48 @@ TEST(NetFindFirstValidIfAny, Ok)
   auto v4_0 = entry(false, "10.11.12.13");
   auto v4_1 = entry(false, "10.11.12.14");
   auto v6_0 = entry(true, "10.11.12.15");
-  using I = Iterator<Resolver<N>>;
   {
-    Entry* a[] = {nullptr};
-    auto optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{false});
+    // Empty range
+    std::vector<Entry> entries;
+    auto optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{false});
     ASSERT_FALSE(optionalEntry);
   }
   {
-    Entry* a[] = {&v4_0, &v4_1, &v6_0, nullptr};
-    auto optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{false});
+    // First valid entry is IPv4
+    std::vector<Entry> entries = {v4_0, v4_1, v6_0};
+    auto optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{false});
     ASSERT_EQ(v4_0, optionalEntry.value());
-    optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{true});
-    ASSERT_EQ(v4_0, optionalEntry);
+    optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{true});
+    ASSERT_EQ(v4_0, optionalEntry.value());
   }
   {
-    Entry* a[] = {&v6_0, &v4_0, &v4_1, nullptr};
-    auto optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{false});
+    // First entry is IPv6, first IPv4 is second
+    std::vector<Entry> entries = {v6_0, v4_0, v4_1};
+    auto optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{false});
     ASSERT_EQ(v4_0, optionalEntry.value());
-    optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{true});
+    optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{true});
     ASSERT_EQ(v6_0, optionalEntry.value());
   }
   {
-    Entry* a[] = {&v6_0, nullptr};
-    auto optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{true});
+    // Only IPv6 entries
+    std::vector<Entry> entries = {v6_0};
+    auto optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{true});
     ASSERT_EQ(v6_0, optionalEntry.value());
-    optionalEntry = findFirstValidIfAny(I{a}, I{}, IpV6Enabled{false});
+    optionalEntry = findFirstValidIfAny(
+                      entries.begin(), entries.end(),
+                      IpV6Enabled{false});
     ASSERT_FALSE(optionalEntry);
   }
 }
@@ -204,23 +221,25 @@ TEST(NetResolveUrlList, Success)
   using namespace qi;
   using namespace qi::sock;
   using N = mock::Network;
-  auto _ = ka::scoped_set_and_restore(Resolver<N>::async_resolve, mock::defaultAsyncResolve);
-  using I = Iterator<Resolver<N>>;
-  Promise<std::pair<ErrorCode<N>, I>> promiseResult;
+  auto _ = ka::scoped_set_and_restore(Resolver<N>::_async_resolve_impl, mock::defaultAsyncResolve);
+  using Results = ResolverResults<Resolver<N>>;
+  Promise<std::pair<ErrorCode<N>, Results>> promiseResult;
   IoService<N> io;
   const std::string host = "10.11.12.13";
   ResolveUrlList<N> resolve{io};
   resolve(Url{"tcp://" + host + ":1234"},
-    [&](ErrorCode<N> e, I it) mutable {
-      promiseResult.setValue({e, it});
+    [&](ErrorCode<N> e, Results results) mutable {
+      promiseResult.setValue({e, results});
     }
   );
   auto fut = promiseResult.future();
   ASSERT_EQ(FutureState_FinishedWithValue, fut.waitFor(defaultTimeout));
   ASSERT_EQ(success<ErrorCode<N>>(), fut.value().first);
-  auto it = fut.value().second;
+  auto results = fut.value().second;
   const N::_resolver_entry entryIpV4{{{false, host}}};
   const N::_resolver_entry entryIpV6{{{true, host}}};
+  ASSERT_EQ(2u, results.size());
+  auto it = results.begin();
   ASSERT_EQ(entryIpV4, *it);
   ++it;
   ASSERT_EQ(entryIpV6, *it);
@@ -236,13 +255,13 @@ TEST(NetResolveUrlList, Cancel)
   using namespace qi;
   using namespace qi::sock;
   using N = mock::Network;
-  using I = Iterator<Resolver<N>>;
+  using Results = ResolverResults<Resolver<N>>;
 
-  Promise<std::pair<ErrorCode<N>, I>> promiseResolve;
+  Promise<std::pair<ErrorCode<N>, Results>> promiseResolve;
   std::thread threadResolve;
   auto _ = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Resolver<N>::query, Resolver<N>::_anyResolveHandler h) {
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string, std::string, Resolver<N>::_anyResolveHandler h) {
       threadResolve = std::thread{[=]() mutable {
         // Block until the resolve promise has been set.
         auto p = promiseResolve.future().value();
@@ -250,19 +269,19 @@ TEST(NetResolveUrlList, Cancel)
       }};
     }
   );
-  Promise<std::pair<ErrorCode<N>, I>> promiseResult;
+  Promise<std::pair<ErrorCode<N>, Results>> promiseResult;
   Promise<void> promiseCancel;
   IoService<N> io;
   const std::string host = "10.11.12.13";
   ResolveUrlList<N> resolve{io};
   resolve(
     Url{"tcp://" + host + ":1234"},
-    [&](ErrorCode<N> e, I it) { // onComplete
-      promiseResult.setValue({e, it});
+    [&](ErrorCode<N> e, Results results) { // onComplete
+      promiseResult.setValue({e, results});
     },
     [&](Resolver<N>&) { // setupCancel
       promiseCancel.future().andThen([=](void*) mutable {
-        promiseResolve.setValue({operationAborted<ErrorCode<N>>(), I{}});
+        promiseResolve.setValue({operationAborted<ErrorCode<N>>(), Results{}});
       });
     }
   );

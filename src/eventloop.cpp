@@ -6,7 +6,8 @@
 #include <system_error>
 #include <memory>
 
-#include <boost/asio/io_service.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/program_options.hpp>
 #include <boost/make_shared.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -303,8 +304,8 @@ namespace qi {
         std::max(static_cast<int>(std::thread::hardware_concurrency()), 3));
     }
 
-    _io.reset();
-    delete _work.exchange(new boost::asio::io_service::work(_io));
+    _io.restart();
+    delete _work.exchange(new boost::asio::executor_work_guard<boost::asio::io_context::executor_type>(_io.get_executor()));
 
     auto min = _minThreads.load();
     auto max = _maxThreads.load();
@@ -663,7 +664,7 @@ namespace qi {
       const auto id = ++gTaskId;
 
       auto countTotalTask = ka::shared_ptr(ka::scoped_incr_and_decr(_totalTask));
-      _io.post([=] { invoke_maybe(cb, id, Promise<void>{}, erc, countTotalTask,
+      boost::asio::post(_io, [=] { invoke_maybe(cb, id, Promise<void>{}, erc, countTotalTask,
                                   UpdateLastWorkDate{true}); });
     }
     else
@@ -712,7 +713,7 @@ namespace qi {
     if (delay > Duration::zero())
     {
       boost::shared_ptr<SteadyTimer> timer = boost::make_shared<SteadyTimer>(_io);
-      timer->expires_from_now(delay);
+      timer->expires_after(delay);
       auto prom = detail::makeCancelingPromise(options, boost::bind(&SteadyTimer::cancel, timer));
       timer->async_wait([=](const boost::system::error_code& erc) {
         invoke_maybe(cb, id, prom, erc, countTotalTask, update);
@@ -720,7 +721,7 @@ namespace qi {
       return prom.future();
     }
     Promise<void> prom;
-    _io.post([=] { invoke_maybe(cb, id, prom, erc, countTotalTask, update); });
+    boost::asio::post(_io, [=] { invoke_maybe(cb, id, prom, erc, countTotalTask, update); });
     return prom.future();
   }
 
