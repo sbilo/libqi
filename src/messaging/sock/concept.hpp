@@ -338,7 +338,7 @@ namespace qi { namespace sock {
 /// It has been designed to closely fit Boost.Asio, so as to incur no performance
 /// overhead.
 /// Another model is a mock for unit tests.
-namespace concept // To allow doc tools to extract this documentation.
+namespace concepts // To allow doc tools to extract this documentation.
 {
 }
 }} // namespace qi::sock
