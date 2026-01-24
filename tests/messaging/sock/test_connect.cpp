@@ -26,14 +26,14 @@ TEST(NetConnectSocket, ResolveCalledAfterParentHasBeenDestroyed)
   // The resolve is going to fail. Before calling the handler, we're going to
   // wait the ConnectSocketFuture object is destroyed.
   auto _ = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Query<Resolver<N>>, Resolver<N>::_anyResolveHandler h) {
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string, std::string, Resolver<N>::_anyResolveHandler h) {
       // We launch asynchronously to return immediately.
       resolveThread = std::thread{[=]{
         // Wait for the object destruction.
         nukeObject.future().wait();
         // Now call the handler.
-        h(operationAborted<ErrorCode<N>>(), Resolver<N>::iterator{});
+        h(operationAborted<ErrorCode<N>>(), Resolver<N>::results_type{});
       }};
     }
   );
@@ -142,11 +142,11 @@ TYPED_TEST(NetConnectFuture, FailsOnResolve)
 
   std::string receivedHost, receivedPort;
   auto _ = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Query<Resolver<N>> q, Resolver<N>::_anyResolveHandler h) {
-      receivedHost = q._host;
-      receivedPort = q._port;
-      h(networkUnreachable<ErrorCode<N>>(), Resolver<N>::iterator{});
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string host, std::string port, Resolver<N>::_anyResolveHandler h) {
+      receivedHost = host;
+      receivedPort = port;
+      h(networkUnreachable<ErrorCode<N>>(), Resolver<N>::results_type{});
     }
   );
   IoService<N>& io = N::defaultIoService();
@@ -178,14 +178,14 @@ TYPED_TEST(NetConnectFuture, ResolveCalledAfterParentHasBeenDestroyed)
   // The resolve is going to fail. Before calling the handler, we're going to
   // wait the ConnectFuture object is destroyed.
   auto _ = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Query<Resolver<N>>, Resolver<N>::_anyResolveHandler h) {
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string, std::string, Resolver<N>::_anyResolveHandler h) {
       // We launch asynchronously to return immediately.
       resolveThread = std::thread{[=]{
         // Wait for the object destruction.
         nukeObject.future().wait();
         // Now call the handler.
-        h(operationAborted<ErrorCode<N>>(), Resolver<N>::iterator{});
+        h(operationAborted<ErrorCode<N>>(), Resolver<N>::results_type{});
       }};
     }
   );
@@ -225,11 +225,11 @@ TYPED_TEST(NetConnectFuture, ResolvedBySkippingIpV6)
   // The resolve is going to fail. Before calling the handler, we're going to
   // wait the ConnectFuture object is destroyed.
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Query<Resolver<N>> q, Resolver<N>::_anyResolveHandler h) {
-      static N::_resolver_entry entryIpV6{{{true}}}, entryIpV4{{{false, q._host}}};
-      static N::_resolver_entry* a[] = {&entryIpV6, &entryIpV6, &entryIpV4, nullptr};
-      h(ErrorCode<N>{}, Resolver<N>::iterator{a});
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string host, std::string, Resolver<N>::_anyResolveHandler h) {
+      N::_resolver_entry entryIpV6{{{true}}}, entryIpV4{{{false, host}}};
+      std::vector<N::_resolver_entry> entries = {entryIpV6, entryIpV6, entryIpV4};
+      h(ErrorCode<N>{}, Resolver<N>::results_type{std::move(entries)});
     }
   );
   std::string resolvedHost;
@@ -264,11 +264,11 @@ TYPED_TEST(NetConnectFuture, OnlyIpV6EndpointsResolvedButIpV6NotAllowed)
   // The resolve is going to fail. Before calling the handler, we're going to
   // wait the ConnectFuture object is destroyed.
   auto _ = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [](Query<Resolver<N>>, Resolver<N>::_anyResolveHandler h) {
-      static Entry entryIpV6{{{true}}};
-      static Entry* a[] = {&entryIpV6, &entryIpV6, &entryIpV6, nullptr};
-      h(success<ErrorCode<N>>(), Resolver<N>::iterator{a});
+    Resolver<N>::_async_resolve_impl,
+    [](std::string, std::string, Resolver<N>::_anyResolveHandler h) {
+      Entry entryIpV6{{{true}}};
+      std::vector<Entry> entries = {entryIpV6, entryIpV6, entryIpV6};
+      h(success<ErrorCode<N>>(), Resolver<N>::results_type{std::move(entries)});
     }
   );
   IoService<N>& io = N::defaultIoService();
@@ -297,7 +297,7 @@ TYPED_TEST(NetConnectFuture, ConnectCalledAfterParentHasBeenDestroyed)
   // The resolve is going to fail. Before calling the handler, we're going to
   // wait the ConnectFuture object is destroyed.
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   auto scopedConnect = ka::scoped_set_and_restore(
@@ -337,7 +337,7 @@ TYPED_TEST(NetConnectFuture, FailsOnConnect)
   using S = SslSocket<N>;
 
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   std::string resolvedHost;
@@ -368,7 +368,7 @@ TYPED_TEST(NetConnectFuture, SucceedsNonSsl)
   using S = SslSocket<N>;
 
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   auto scopedConnect = ka::scoped_set_and_restore(
@@ -393,7 +393,7 @@ TYPED_TEST(NetConnectFuture, FailsOnHandshake)
   using S = SslSocket<N>;
 
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   auto scopedConnect = ka::scoped_set_and_restore(
@@ -427,7 +427,7 @@ TYPED_TEST(NetConnectFuture, HandshakeHandlerCalledAfterParentHasBeenDestroyed)
   using N = mock::Network;
   using S = SslSocket<N>;
 
-  Resolver<N>::async_resolve = mock::defaultAsyncResolve;
+  Resolver<N>::_async_resolve_impl = mock::defaultAsyncResolve;
   Lowest<S>::async_connect = mock::defaultAsyncConnect;
   qi::Promise<void> nukeObject;
   std::thread t;
@@ -477,7 +477,7 @@ TYPED_TEST(NetConnectFuture, SucceedsSsl)
   using S = SslSocket<N>;
 
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   auto scopedConnect = ka::scoped_set_and_restore(
@@ -500,12 +500,12 @@ TYPED_TEST(NetConnectFuture, SucceedsSsl)
 template<typename N, typename S>
 struct SetupStop
 {
-  using I = qi::sock::Iterator<qi::sock::Resolver<N>>;
+  using Results = qi::sock::ResolverResults<qi::sock::Resolver<N>>;
 
   qi::Future<void> futStopResolve;
   qi::Future<void> futStopConnect;
   bool connectAlreadySetup;
-  qi::Promise<std::pair<qi::sock::ErrorCode<N>, I>> promiseResolve;
+  qi::Promise<std::pair<qi::sock::ErrorCode<N>, Results>> promiseResolve;
   qi::Promise<qi::sock::ErrorCode<N>> promiseConnect;
 
   void operator()(qi::sock::Resolver<N>&)
@@ -513,7 +513,7 @@ struct SetupStop
     using namespace qi::sock;
     auto promResolve = promiseResolve;
     futStopResolve.andThen([=](void*) mutable {
-      promResolve.setValue({operationAborted<ErrorCode<N>>(), I{}});
+      promResolve.setValue({operationAborted<ErrorCode<N>>(), Results{}});
     });
   }
 
@@ -542,14 +542,14 @@ TEST(NetConnectFutureStop, WhileResolving)
   using N = mock::Network;
   using S = SslSocket<N>;
 
-  Promise<std::pair<ErrorCode<N>, Iterator<Resolver<N>>>> promiseResolve;
+  Promise<std::pair<ErrorCode<N>, ResolverResults<Resolver<N>>>> promiseResolve;
   Promise<void> promiseStopResolve;
   Promise<void> promiseStopConnect;
   Promise<ErrorCode<N>> promiseConnect;
   std::thread threadResolve;
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Query<Resolver<N>>, Resolver<N>::_anyResolveHandler h) {
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string, std::string, Resolver<N>::_anyResolveHandler h) {
       threadResolve = std::thread{[=]() mutable {
         // Block until the resolve promise has been set.
         auto p = promiseResolve.future().value();
@@ -594,13 +594,13 @@ TEST(NetConnectFutureStop, WhileConnecting)
   using N = mock::Network;
   using S = SslSocket<N>;
 
-  Promise<std::pair<ErrorCode<N>, Iterator<Resolver<N>>>> promiseResolve;
+  Promise<std::pair<ErrorCode<N>, ResolverResults<Resolver<N>>>> promiseResolve;
   Promise<void> promiseStopResolve;
   Promise<void> promiseStopConnect;
   Promise<ErrorCode<N>> promiseConnect;
   std::thread threadConnect;
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   auto scopedConnect = ka::scoped_set_and_restore(
@@ -645,13 +645,13 @@ TEST(NetConnectFutureStop, WhileHandshaking)
   using N = mock::Network;
   using S = SslSocket<N>;
 
-  Promise<std::pair<ErrorCode<N>, Iterator<Resolver<N>>>> promiseResolve;
+  Promise<std::pair<ErrorCode<N>, ResolverResults<Resolver<N>>>> promiseResolve;
   Promise<void> promiseStopResolve;
   Promise<void> promiseStopConnect;
   Promise<ErrorCode<N>> promiseConnect;
   std::thread threadHandshake;
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
+    Resolver<N>::_async_resolve_impl,
     mock::defaultAsyncResolve
   );
   auto scopedConnect = ka::scoped_set_and_restore(

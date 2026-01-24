@@ -108,8 +108,8 @@ namespace qi {
       qi::SteadyClockTimePoint timepoint, boost::function<void ()> callback,
       ExecutionOptions options, UpdateLastWorkDate);
 
-    boost::asio::io_service _io;
-    std::atomic<boost::asio::io_service::work*> _work; // keep io.run() alive
+    boost::asio::io_context _io;
+    std::atomic<boost::asio::executor_work_guard<boost::asio::io_context::executor_type>*> _work; // keep io.run() alive
     std::atomic<int> _minThreads;
     std::atomic<int> _maxThreads;
 

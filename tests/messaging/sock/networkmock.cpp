@@ -6,8 +6,7 @@
 
 namespace mock
 {
-  N::_resolver_entry* N::resolver_type::iterator::_sentinel = nullptr;
-  N::resolver_type::_anyAsyncResolver N::resolver_type::async_resolve = defaultAsyncResolve;
+  N::resolver_type::_anyAsyncResolver N::resolver_type::_async_resolve_impl = defaultAsyncResolve;
   _LowestLayer::_anyAsyncConnecter _LowestLayer::async_connect = defaultAsyncConnect;
   _LowestLayer::_anyCanceler _LowestLayer::cancel = defaultCancel;
   _LowestLayer::_anyShutdowner _LowestLayer::_shutdown = defaultShutdown;

@@ -470,10 +470,10 @@ TYPED_TEST(NetMessageSocket, DisconnectWhileConnecting)
 
   std::thread threadResolve;
   auto scopedResolve = ka::scoped_set_and_restore(
-    Resolver<N>::async_resolve,
-    [&](Resolver<N>::query q, Resolver<N>::_anyResolveHandler h) {
+    Resolver<N>::_async_resolve_impl,
+    [&](std::string host, std::string port, Resolver<N>::_anyResolveHandler h) {
         threadResolve = std::thread{[=] {
-          mock::defaultAsyncResolve(q, h);
+          mock::defaultAsyncResolve(host, port, h);
         }};
     }
   );
@@ -530,7 +530,7 @@ TYPED_TEST(NetMessageSocket, DisconnectWhileDisconnecting)
 
   Promise<ErrorCode<N>> promiseAsyncReadWrite;
 
-  Resolver<N>::async_resolve = mock::defaultAsyncResolve;
+  Resolver<N>::_async_resolve_impl = mock::defaultAsyncResolve;
   Lowest<SslSocket<N>>::async_connect = mock::defaultAsyncConnect;
   std::vector<std::thread> readThreads, writeThreads;
 

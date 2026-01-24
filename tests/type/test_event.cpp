@@ -100,7 +100,7 @@ TEST_F(ObjectEvent, ConnectBind)
   obj.disconnect(link);
   // The boost bind without _1 gives us a void (void) signature that does not match fire
   EXPECT_ANY_THROW(
-    obj.connect("fire", boost::bind<void>(&ObjectEvent::onFire, this, 51)).value()
+    obj.connect("fire", std::function<void()>(boost::bind(&ObjectEvent::onFire, this, 51))).value()
   );
   // Argument type mismatch
   EXPECT_ANY_THROW(

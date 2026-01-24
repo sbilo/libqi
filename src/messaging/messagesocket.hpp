@@ -2,7 +2,7 @@
 #ifndef _SRC_MESSAGESOCKET_HPP_
 #define _SRC_MESSAGESOCKET_HPP_
 
-# include <boost/asio/io_service.hpp>
+# include <boost/asio/io_context.hpp>
 # include <boost/noncopyable.hpp>
 # include <boost/variant.hpp>
 # include <boost/optional.hpp>
@@ -30,9 +30,9 @@ QI_TYPE_CONCRETE(boost::variant<std::string QI_COMMA qi::Message>);
 
 namespace qi
 {
-  inline boost::asio::io_service* asIoServicePtr(EventLoop* e)
+  inline boost::asio::io_context* asIoServicePtr(EventLoop* e)
   {
-    return static_cast<boost::asio::io_service*>(e->nativeHandle());
+    return static_cast<boost::asio::io_context*>(e->nativeHandle());
   }
 
   class Session;

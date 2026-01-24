@@ -74,7 +74,7 @@ namespace qi {
   static FunctionList* globalAtRun = nullptr;
   static FunctionList* globalAtStop = nullptr;
 
-  static boost::optional<boost::asio::io_service> globalIoService;
+  static boost::optional<boost::asio::io_context> globalIoService;
 
   static void readPathConf()
   {
@@ -145,7 +145,7 @@ namespace qi {
     if (boostPath.is_relative() && !boostPath.has_parent_path())
     {
       environmentPaths.insert(environmentPaths.begin(), currentDirectory);
-      return boost::process::search_path(boostPath, environmentPaths).make_preferred();
+      return boost::process::v1::search_path(boostPath, environmentPaths).make_preferred();
     }
     return bfs::absolute(boostPath, currentDirectory).make_preferred();
   }

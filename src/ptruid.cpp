@@ -16,17 +16,11 @@
 
 namespace qi
 {
-  template<size_t N>
-  static void staticAssertUuidIsByteArray(uint8_t (Uuid::*)[N])
-  {
-    static_assert(sizeof(Uuid) == N, "Uuid must be a byte array.");
-  }
-
   PtrUid::PtrUid(const Uuid& machineUuid, const Uuid& processUuid, const void* ptr)
   {
     static_assert(sizeof(uint8_t) == 1, "uint8_t must have a size of 1 "
                                         "for the array size computation to be valid.");
-    staticAssertUuidIsByteArray(&Uuid::data);
+    static_assert(sizeof(Uuid) == 16, "Uuid must be 16 bytes.");
     std::array<uint8_t,
         sizeof(Uuid) // machine uuid
       + sizeof(Uuid) // process uuid
